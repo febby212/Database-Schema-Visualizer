@@ -2,6 +2,14 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
+
+if [ ! -d "venv" ]; then
+    echo "Creating venv..."
+    python3 -m venv venv
+    venv/bin/pip install --upgrade pip -q
+    venv/bin/pip install -r requirements.txt -q
+fi
+
 source venv/bin/activate
 
 if ! curl -fsS http://127.0.0.1:8080/api/health >/dev/null 2>&1; then
