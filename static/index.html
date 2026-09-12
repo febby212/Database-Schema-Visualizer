@@ -46,6 +46,17 @@
         .zoom-controls { position: absolute; bottom: 12px; left: 12px; display: flex; flex-direction: column; gap: 4px; z-index: 10; }
         .zoom-btn { width: 32px; height: 32px; background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e1e4e8; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .zoom-btn:hover { background: #21262d; }
+        .search-box { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; gap: 4px; align-items: center; background: #161b22dd; border: 1px solid #30363d; border-radius: 8px; padding: 6px 10px; backdrop-filter: blur(8px); }
+        .search-box input { background: #0d1117; color: #e1e4e8; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; font-size: 13px; outline: none; width: 220px; }
+        .search-box input:focus { border-color: #58a6ff; }
+        .search-box input::placeholder { color: #484f58; }
+        .search-count { font-size: 11px; color: #8b949e; white-space: nowrap; }
+        .tbl.search-match .tbl-card { stroke: #58a6ff; stroke-width: 2.5; }
+        .tbl.search-dim { opacity: 0.25; }
+        [data-theme="light"] .search-box { background: #ffffffdd; border-color: #d0d7de; }
+        [data-theme="light"] .search-box input { background: #ffffff; color: #24292f; border-color: #d0d7de; }
+        [data-theme="light"] .search-box input::placeholder { color: #8c959f; }
+        [data-theme="light"] .search-count { color: #656d76; }
         #detail-panel, #export-panel { padding: 20px; overflow-y: auto; }
         .col-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
         .col-table th { text-align: left; padding: 8px 12px; background: #161b22; color: #8b949e; font-weight: 600; border-bottom: 1px solid #30363d; }
@@ -154,6 +165,10 @@
             <div id="graph-panel" class="panel active">
                 <div id="graph-container">
                     <svg id="svg-canvas"></svg>
+                    <div class="search-box" id="search-box" style="display:none;">
+                        <input id="table-search" placeholder="&#x1F50D; Search table..." oninput="searchTable(this.value)" onkeydown="if(event.key==='Enter')focusSearchResult()"/>
+                        <span class="search-count" id="search-count"></span>
+                    </div>
                     <div class="zoom-controls">
                         <button class="zoom-btn" onclick="zoomIn()">+</button>
                         <button class="zoom-btn" onclick="zoomOut()">&#x2212;</button>
@@ -284,6 +299,9 @@ async function loadSchema(database) {
         currentDatabase = database;
         currentSchema = await api('/schema', { connection_id: currentConnectionId, database });
         document.getElementById('tabs').style.display = 'flex';
+        document.getElementById('search-box').style.display = 'flex';
+        document.getElementById('table-search').value = '';
+        searchTable('');
         switchTab('diagram');
         drawDiagram(currentSchema);
         renderDetails(currentSchema);
@@ -547,6 +565,38 @@ function zoomFit() {
 }
 function zoomIn(){const svg=d3.select('#svg-canvas');if(zoomBehavior)svg.transition().duration(250).call(zoomBehavior.scaleBy,1.3);}
 function zoomOut(){const svg=d3.select('#svg-canvas');if(zoomBehavior)svg.transition().duration(250).call(zoomBehavior.scaleBy,0.77);}
+
+/* ---- Search ---- */
+let searchMatches = [];
+function searchTable(q) {
+    q = (q||'').trim().toLowerCase();
+    d3.selectAll('.tbl').classed('search-match',false).classed('search-dim',false);
+    searchMatches = [];
+    const cnt = document.getElementById('search-count');
+    if (!q || !currentSchema) { if(cnt)cnt.textContent=''; return; }
+    currentSchema.tables.forEach(t => {
+        if (t.name.toLowerCase().includes(q)) searchMatches.push(t.name);
+    });
+    if(cnt)cnt.textContent = searchMatches.length ? `${searchMatches.length} found` : 'no match';
+    if (!searchMatches.length) return;
+    searchMatches.forEach(n => d3.select(`#tbl-${CSS.escape(n)}`).classed('search-match',true));
+    d3.selectAll('.tbl').filter(function(){return !searchMatches.includes(this.id.replace('tbl-',''));}).classed('search-dim',true);
+}
+function focusSearchResult() {
+    if (!searchMatches.length) return;
+    const name = searchMatches[0];
+    const node = d3.select(`#tbl-${CSS.escape(name)}`);
+    if (node.empty()) return;
+    highlightTable(name);
+    const svg = d3.select('#svg-canvas');
+    const world = svg.select('#world');
+    if (!world.node()||!zoomBehavior) return;
+    const bbox = node.node().getBBox();
+    const cx = bbox.x + bbox.width/2, cy = bbox.y + bbox.height/2;
+    const cw = document.getElementById('graph-container').clientWidth, ch = document.getElementById('graph-container').clientHeight;
+    const scale = 1;
+    svg.transition().duration(400).call(zoomBehavior.transform, d3.zoomIdentity.translate(cw/2-cx*scale, ch/2-cy*scale).scale(scale));
+}
 
 /* ---- Details ---- */
 function renderDetails(schema) {
