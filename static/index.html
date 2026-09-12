@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schema Visualizer</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0f1117; color: #e1e4e8; height: 100vh; overflow: hidden; }
+        .header { background: #161b22; border-bottom: 1px solid #30363d; padding: 10px 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .header h1 { font-size: 15px; color: #58a6ff; white-space: nowrap; }
+        .header select, .header input { background: #0d1117; color: #e1e4e8; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; font-size: 13px; outline: none; }
+        .header select:focus, .header input:focus { border-color: #58a6ff; }
+        .header input::placeholder { color: #484f58; }
+        .btn { background: #238636; color: #fff; border: none; border-radius: 6px; padding: 6px 16px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+        .btn:hover { background: #2ea043; }
+        .btn-secondary { background: #21262d; border: 1px solid #30363d; }
+        .btn-secondary:hover { background: #30363d; }
+        .main { display: flex; height: calc(100vh - 49px); }
+        .sidebar { width: 260px; min-width: 260px; background: #161b22; border-right: 1px solid #30363d; display: flex; flex-direction: column; overflow: hidden; }
+        .sidebar-title { padding: 12px 16px; font-size: 12px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #30363d; }
+        .sidebar-list { flex: 1; overflow-y: auto; padding: 8px; }
+        .sidebar-item { padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; }
+        .sidebar-item:hover { background: #1f2937; }
+        .sidebar-empty { padding: 20px 16px; color: #484f58; font-size: 13px; text-align: center; }
+        .sidebar-item-actions { display: flex; gap: 4px; align-items: center; }
+        .icon-btn { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 4px; opacity: 0.6; transition: all 0.15s; }
+        .icon-btn:hover { color: #e1e4e8; background: #30363d; opacity: 1; }
+        .icon-btn.danger:hover { color: #f85149; background: #da363322; }
+        .theme-toggle { width: 34px; height: 34px; border: 1px solid #30363d; background: #0d1117; border-radius: 6px; font-size: 16px; display: flex; align-items: center; justify-content: center; opacity: 1; margin-left: auto; }
+        .theme-toggle:hover { background: #21262d; }
+        .db-type-tag { font-size: 11px; background: #1f6feb22; color: #58a6ff; padding: 1px 6px; border-radius: 4px; }
+        .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        .tabs { display: flex; background: #161b22; border-bottom: 1px solid #30363d; padding: 0 16px; }
+        .tab { padding: 10px 16px; font-size: 13px; cursor: pointer; color: #8b949e; border-bottom: 2px solid transparent; user-select: none; }
+        .tab:hover { color: #e1e4e8; }
+        .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+        .panel { flex: 1; overflow: hidden; display: none; }
+        .panel.active { display: flex; flex-direction: column; }
+        #graph-container { flex: 1; position: relative; overflow: hidden; cursor: grab; background: #0b0d13; }
+        #graph-container:active { cursor: grabbing; }
+        #graph-container svg { width: 100%; height: 100%; display: block; }
+        .graph-hint { position: absolute; bottom: 12px; right: 12px; background: #161b22dd; color: #8b949e; font-size: 11px; padding: 6px 12px; border-radius: 6px; pointer-events: none; }
+        .zoom-controls { position: absolute; bottom: 12px; left: 12px; display: flex; flex-direction: column; gap: 4px; z-index: 10; }
+        .zoom-btn { width: 32px; height: 32px; background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e1e4e8; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .zoom-btn:hover { background: #21262d; }
+        #detail-panel, #export-panel { padding: 20px; overflow-y: auto; }
+        .col-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+        .col-table th { text-align: left; padding: 8px 12px; background: #161b22; color: #8b949e; font-weight: 600; border-bottom: 1px solid #30363d; }
+        .col-table td { padding: 6px 12px; border-bottom: 1px solid #21262d; }
+        .pk-badge { background: #da363322; color: #f85149; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .fk-badge { background: #1f6feb22; color: #58a6ff; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .section-title { font-size: 14px; font-weight: 600; color: #8b949e; margin: 20px 0 10px; }
+        .export-buttons { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+        .export-code { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 16px; font-family: monospace; font-size: 13px; white-space: pre-wrap; max-height: calc(100vh - 200px); overflow: auto; line-height: 1.5; color: #c9d1d9; }
+        .tbl { transition: opacity 0.15s; }
+        .tbl.dim { opacity: 0.2; }
+        .tbl-card { fill: #161b22; stroke: #30363d; stroke-width: 1.5; rx: 8; ry: 8; }
+        .tbl-hdr { rx: 8; ry: 8; }
+        .tbl-title { font-size: 12px; font-weight: 600; fill: #ffffff; }
+        .tbl-type { font-size: 10px; fill: #ffffffaa; }
+        .row-bg { fill: transparent; }
+        .row-bg.hot { fill: #58a6ff22; }
+        .col-txt { font-size: 11px; fill: #c9d1d9; }
+        .col-type { font-size: 10px; fill: #8b949e; text-anchor: end; }
+        .port-dot { fill: #8b949e; stroke: #0f1117; stroke-width: 1.5; }
+        .port-dot.pk { fill: #f85149; }
+        .port-dot.fk { fill: #58a6ff; }
+        .port-dot.hot { r: 5; fill: #ffffff; }
+        .rel { cursor: pointer; }
+        .rel.dim { opacity: 0.12; }
+        .rel-hit { stroke: transparent; stroke-width: 18; fill: none; }
+        .rel-line { fill: none; stroke-width: 1.8; transition: stroke-width 0.12s; }
+        .rel:hover .rel-line, .rel.active .rel-line { stroke-width: 3.5; }
+        .rel-badge { pointer-events: none; }
+        .rel-badge rect { fill: #0b0d13; stroke-width: 1; rx: 4; ry: 4; }
+        .rel-badge text { font-size: 10px; font-weight: 600; dominant-baseline: central; text-anchor: middle; }
+        .rel-tip { position: absolute; display: none; z-index: 30; background: #161b22ee; border: 1px solid #30363d; border-radius: 8px; padding: 10px 14px; font-size: 12px; line-height: 1.6; max-width: 320px; box-shadow: 0 6px 20px #000c; pointer-events: none; }
+        .welcome { flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; color: #484f58; }
+        .welcome h2 { font-size: 20px; color: #8b949e; }
+        .welcome p { font-size: 14px; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0d1117; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+        [data-theme="light"] body { background: #f6f8fa; color: #24292f; }
+        [data-theme="light"] .header { background: #ffffff; border-bottom-color: #d0d7de; }
+        [data-theme="light"] .header select, [data-theme="light"] .header input { background: #ffffff; color: #24292f; border-color: #d0d7de; }
+        [data-theme="light"] .header input::placeholder { color: #8c959f; }
+        [data-theme="light"] .btn-secondary { background: #f6f8fa; border-color: #d0d7de; color: #24292f; }
+        [data-theme="light"] .btn-secondary:hover { background: #eaeef2; }
+        [data-theme="light"] .sidebar { background: #ffffff; border-right-color: #d0d7de; }
+        [data-theme="light"] .sidebar-title { color: #656d76; border-bottom-color: #d0d7de; }
+        [data-theme="light"] .sidebar-item { color: #24292f; }
+        [data-theme="light"] .sidebar-item:hover { background: #eaeef2; }
+        [data-theme="light"] .sidebar-empty { color: #8c959f; }
+        [data-theme="light"] .icon-btn { color: #656d76; }
+        [data-theme="light"] .icon-btn:hover { color: #24292f; background: #eaeef2; }
+        [data-theme="light"] .theme-toggle { background: #ffffff; border-color: #d0d7de; opacity: 1; margin-left: auto; width: 34px; height: 34px; font-size: 16px; }
+        [data-theme="light"] .content { background: #f6f8fa; }
+        [data-theme="light"] .tabs { background: #ffffff; border-bottom-color: #d0d7de; }
+        [data-theme="light"] .tab { color: #656d76; }
+        [data-theme="light"] .tab:hover { color: #24292f; }
+        [data-theme="light"] #graph-container { background: #eef2f7; }
+        [data-theme="light"] .graph-hint { background: #ffffffdd; color: #656d76; border: 1px solid #d0d7de; }
+        [data-theme="light"] .zoom-btn { background: #ffffff; border-color: #d0d7de; color: #24292f; }
+        [data-theme="light"] .zoom-btn:hover { background: #eaeef2; }
+        [data-theme="light"] .col-table th { background: #f6f8fa; color: #656d76; border-bottom-color: #d0d7de; }
+        [data-theme="light"] .col-table td { border-bottom-color: #d8dee4; color: #24292f; }
+        [data-theme="light"] .export-code { background: #ffffff; border-color: #d0d7de; color: #24292f; }
+        [data-theme="light"] .tbl-card { fill: #ffffff; stroke: #d0d7de; }
+        [data-theme="light"] .col-txt { fill: #24292f; }
+        [data-theme="light"] .col-type { fill: #656d76; }
+        [data-theme="light"] .port-dot { stroke: #ffffff; }
+        [data-theme="light"] .port-dot.hot { fill: #0969da; }
+        [data-theme="light"] .rel-line { stroke: #0969da; stroke-width: 2.2; }
+        [data-theme="light"] .rel-badge rect { fill: #ffffff; stroke: #0969da; stroke-width: 1.5; }
+        [data-theme="light"] .rel-badge text { fill: #0969da; font-weight: 700; }
+        [data-theme="light"] .rel-tip { background: #ffffffe6; border-color: #d0d7de; color: #24292f; box-shadow: 0 6px 20px #0002; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>&#x1F5C3; Schema Visualizer</h1>
+        <select id="dbtype">
+            <option value="postgres">PostgreSQL</option>
+            <option value="mysql">MySQL / MariaDB</option>
+            <option value="mongodb">MongoDB</option>
+            <option value="redis">Redis</option>
+        </select>
+        <input id="host" placeholder="host" value="localhost" style="width:100px"/>
+        <input id="port" placeholder="port" style="width:60px"/>
+        <input id="user" placeholder="user" style="width:90px"/>
+        <input id="pwd" placeholder="password" type="password" style="width:100px"/>
+        <input id="dbname" placeholder="schema" style="width:100px"/>
+        <button class="btn" id="connect-btn">Connect</button>
+        <button class="icon-btn theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle theme">&#x263E;</button>
+    </div>
+    <div class="main">
+        <div class="sidebar">
+            <div class="sidebar-title">Connections</div>
+            <div class="sidebar-list" id="sidebar-list">
+                <div class="sidebar-empty">No connections yet.<br>Connect above.</div>
+            </div>
+        </div>
+        <div class="content">
+            <div class="tabs" id="tabs" style="display:none;">
+                <div class="tab active" data-tab="diagram" onclick="switchTab('diagram')">&#x1F4CA; Diagram</div>
+                <div class="tab" data-tab="detail" onclick="switchTab('detail')">&#x1F4CB; Details</div>
+                <div class="tab" data-tab="export" onclick="switchTab('export')">&#x1F4E4; Export</div>
+            </div>
+            <div id="graph-panel" class="panel active">
+                <div id="graph-container">
+                    <svg id="svg-canvas"></svg>
+                    <div class="zoom-controls">
+                        <button class="zoom-btn" onclick="zoomIn()">+</button>
+                        <button class="zoom-btn" onclick="zoomOut()">&#x2212;</button>
+                        <button class="zoom-btn" onclick="zoomFit()" title="Fit to view">&#x2316;</button>
+                    </div>
+                    <div class="graph-hint">Drag: Pan &middot; Scroll: Zoom &middot; Hover/Click: Highlight</div>
+                    <div id="rel-tip" class="rel-tip"></div>
+                </div>
+            </div>
+            <div id="detail-panel" class="panel"></div>
+            <div id="export-panel" class="panel"></div>
+        </div>
+    </div>
+
+<script>
+function getPreferredTheme(){const s=localStorage.getItem('theme');if(s==='light'||s==='dark')return s;return window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('theme',t);const b=document.getElementById('theme-toggle');if(b)b.innerHTML=t==='light'?'&#x263C;':'&#x263E;';}
+function toggleTheme(){applyTheme(document.documentElement.getAttribute('data-theme')==='light'?'dark':'light');}
+applyTheme(getPreferredTheme());
+
+const API = "/api";
+let currentConnectionId = null;
+let currentDatabase = null;
+let currentSchema = null;
+let zoomBehavior = null;
+let activeRelId = null;
+let activeTable = null;
+let allRelations = [];
+const COLORS = { table: '#1f6feb', collection: '#8957e5', key: '#da3633', view: '#238636', default: '#30363d' };
+const ROW_H = 22, HDR_H = 32, CARD_W = 200;
+
+async function api(endpoint, data = null, method = 'POST') {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (data) opts.body = JSON.stringify(data);
+    const r = await fetch(`${API}${endpoint}`, opts);
+    if (!r.ok) { const err = await r.json().catch(() => ({ detail: r.statusText })); throw new Error(err.detail || 'Request failed'); }
+    const ct = r.headers.get('content-type') || '';
+    return ct.includes('json') ? r.json() : r.text();
+}
+
+/* ---- Connect ---- */
+document.getElementById('connect-btn').onclick = async () => {
+    try {
+        const editingId = document.getElementById('conn-id')?.value || null;
+        const resp = await api('/connect', {
+            id: editingId,
+            type: document.getElementById('dbtype').value,
+            host: document.getElementById('host').value || 'localhost',
+            port: document.getElementById('port').value ? +document.getElementById('port').value : undefined,
+            user: document.getElementById('user').value || undefined,
+            password: document.getElementById('pwd').value || undefined,
+            database: document.getElementById('dbname').value || undefined,
+        });
+        currentConnectionId = resp.connection_id;
+        resetFormToConnect();
+        await refreshSidebar();
+        const dbs = await api('/list-databases', { connection_id: currentConnectionId });
+        showDatabases(dbs.databases);
+    } catch (e) { alert('Connection failed: ' + e.message); }
+};
+
+function resetFormToConnect() {
+    const btn = document.getElementById('connect-btn');
+    btn.textContent = 'Connect';
+    const h = document.getElementById('conn-id');
+    if (h) h.remove();
+}
+
+/* ---- Sidebar ---- */
+function refreshSidebar() {
+    return api('/connections', null, 'GET').then(list => {
+        const el = document.getElementById('sidebar-list');
+        if (!list.length) { el.innerHTML = '<div class="sidebar-empty">No connections yet.</div>'; return; }
+        el.innerHTML = '';
+        list.forEach(c => {
+            const div = document.createElement('div');
+            div.className = 'sidebar-item';
+            div.style.cursor = 'default';
+            div.innerHTML = `<span>${c.name}</span><span class="db-type-tag">${c.db_type}</span>`;
+            div.ondblclick = () => loadConnection(c);
+            const actions = document.createElement('div');
+            actions.className = 'sidebar-item-actions';
+            const openBtn = document.createElement('button');
+            openBtn.className = 'icon-btn'; openBtn.title = 'Open';
+            openBtn.innerHTML = '&#x25B6;'; openBtn.style.opacity = '1'; openBtn.style.color = '#238636';
+            openBtn.onclick = (e) => { e.stopPropagation(); loadConnection(c); };
+            const editBtn = document.createElement('button');
+            editBtn.className = 'icon-btn'; editBtn.title = 'Edit';
+            editBtn.innerHTML = '&#x270E;';
+            editBtn.onclick = (e) => { e.stopPropagation(); editConnection(c.id); };
+            const delBtn = document.createElement('button');
+            delBtn.className = 'icon-btn danger'; delBtn.title = 'Delete';
+            delBtn.innerHTML = '&#x2716;';
+            delBtn.onclick = (e) => { e.stopPropagation(); deleteConnectionPrompt(c.id); };
+            actions.appendChild(openBtn); actions.appendChild(editBtn); actions.appendChild(delBtn);
+            div.appendChild(actions); el.appendChild(div);
+        });
+    });
+}
+
+async function loadConnection(c) {
+    currentConnectionId = c.id;
+    try {
+        const dbs = await api('/list-databases', { connection_id: c.id });
+        showDatabases(dbs.databases);
+    } catch(e) { alert(e.message); }
+}
+
+function showDatabases(databases) {
+    const el = document.getElementById('sidebar-list');
+    el.innerHTML = '';
+    const back = document.createElement('div');
+    back.className = 'sidebar-item';
+    back.innerHTML = '&#x2190; Connections';
+    back.onclick = refreshSidebar;
+    el.appendChild(back);
+    databases.forEach(db => {
+        const div = document.createElement('div');
+        div.className = 'sidebar-item';
+        div.textContent = db;
+        div.onclick = () => loadSchema(db);
+        el.appendChild(div);
+    });
+}
+
+async function loadSchema(database) {
+    try {
+        currentDatabase = database;
+        currentSchema = await api('/schema', { connection_id: currentConnectionId, database });
+        document.getElementById('tabs').style.display = 'flex';
+        switchTab('diagram');
+        drawDiagram(currentSchema);
+        renderDetails(currentSchema);
+        renderExportButtons();
+    } catch(e) { alert(e.message); }
+}
+
+/* ---- Edit & Delete ---- */
+async function editConnection(connId) {
+    const conn = await api('/connections', null, 'GET').then(list => list.find(c => c.id === connId));
+    if (!conn) { alert('Connection not found'); return; }
+    document.getElementById('dbtype').value = conn.db_type;
+    document.getElementById('host').value = conn.host || '';
+    document.getElementById('port').value = conn.port || '';
+    document.getElementById('user').value = conn.username || '';
+    document.getElementById('pwd').value = conn.password || '';
+    document.getElementById('dbname').value = conn.database || '';
+    let h = document.getElementById('conn-id');
+    if (!h) { h = document.createElement('input'); h.type = 'hidden'; h.id = 'conn-id'; document.querySelector('.header').appendChild(h); }
+    h.value = connId;
+    const btn = document.getElementById('connect-btn');
+    btn.textContent = 'Save';
+}
+
+async function deleteConnectionPrompt(connId) {
+    if (!confirm('Delete this connection?')) return;
+    try {
+        await api(`/connections/${connId}`, null, 'DELETE');
+        await refreshSidebar();
+    } catch (e) { alert('Delete failed: ' + e.message); }
+}
+
+/* ---- Tabs ---- */
+function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    document.getElementById('graph-panel').style.display = tab === 'diagram' ? 'flex' : 'none';
+    document.getElementById('detail-panel').style.display = tab === 'detail' ? 'block' : 'none';
+    document.getElementById('export-panel').style.display = tab === 'export' ? 'block' : 'none';
+    if (tab === 'diagram') setTimeout(() => zoomFit(), 50);
+}
+
+/* ---- Diagram ---- */
+function detectRelationType(fk, srcT, tgtT) {
+    const srcCol = srcT ? srcT.columns.find(c => c.name === fk.constrained_column) : null;
+    return (srcCol && srcCol.is_pk) ? '1 : 1' : '1 : N';
+}
+
+function drawDiagram(schema) {
+    const svg = d3.select('#svg-canvas');
+    svg.selectAll('*').remove();
+    activeRelId = null; activeTable = null; hideTooltip();
+    if (!schema.tables.length) return;
+
+    const defs = svg.append('defs');
+    [['arr-fk','#58a6ff',6],['arr-fk-hot','#ffffff',7],['arr-inf','#da3633',6],['arr-inf-hot','#ffffff',7]].forEach(([id,col,sz]) => {
+        defs.append('marker').attr('id',id).attr('viewBox','0 0 10 10').attr('refX',8).attr('refY',5).attr('markerWidth',sz).attr('markerHeight',sz).attr('orient','auto').append('path').attr('d','M 0 1 L 10 5 L 0 9 z').attr('fill',col);
+    });
+
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({ rankdir: 'LR', nodesep: 100, ranksep: 280, marginx: 80, marginy: 60 });
+    g.setDefaultEdgeLabel(() => ({}));
+
+    const tableMap = {};
+    schema.tables.forEach(t => { tableMap[t.name] = t; g.setNode(t.name, { width: CARD_W, height: HDR_H + Math.max(t.columns.length,1)*ROW_H + 6 }); });
+
+    const relations = [];
+    allRelations = relations;
+    schema.tables.forEach(src => {
+        (src.foreign_keys || []).forEach(fk => {
+            const tgt = tableMap[fk.referred_table]; if (!tgt) return;
+            g.setEdge(tgt.name, src.name);  // parent → child (left → right)
+            relations.push({ id:`fk-${src.name}-${fk.constrained_column}-${tgt.name}-${fk.referred_column}`, kind:'fk', srcTable:tgt.name, srcCol:fk.referred_column, tgtTable:src.name, tgtCol:fk.constrained_column, relType:detectRelationType(fk,tgt,src), name:fk.name||`${src.name}_${fk.constrained_column}_fk` });
+        });
+    });
+    (schema.inferred_relations || []).forEach(inf => {
+        const tgt = tableMap[inf.to_table]; if (!tgt) return;
+        g.setEdge(inf.from_table, tgt.name);
+        relations.push({ id:`inf-${inf.from_table}-${inf.from_field}-${inf.to_table}-${inf.to_field}`, kind:'inferred', srcTable:inf.from_table, srcCol:inf.from_field, tgtTable:inf.to_table, tgtCol:inf.to_field, relType:'Inferred (M:1)', confidence:inf.confidence });
+    });
+
+    dagre.layout(g);
+
+    const world = svg.append('g').attr('id','world');
+    const edgesGroup = world.append('g').attr('id','edges-group');
+    const nodesGroup = world.append('g').attr('id','nodes-group');
+
+    svg.on('click', (e) => { if (e.target.tagName==='svg'||e.target.id==='world') clearHighlight(); });
+
+    function getPort(tableName, colName) {
+        const node = g.node(tableName); if (!node) return {x:0,y:0};
+        const t = tableMap[tableName];
+        const colIdx = t ? t.columns.findIndex(c => c.name===colName) : -1;
+        const yOff = (colIdx>=0) ? (HDR_H + colIdx*ROW_H + ROW_H/2) : (node.height/2);
+        const topY = node.y - node.height/2;
+        return { left:{x:node.x-node.width/2, y:topY+yOff}, right:{x:node.x+node.width/2, y:topY+yOff} };
+    }
+
+    schema.tables.forEach(t => {
+        const node = g.node(t.name), cardH = node.height, x = node.x-CARD_W/2, y = node.y-cardH/2;
+        const hdrColor = COLORS[t.table_type] || COLORS.default;
+        const tblG = nodesGroup.append('g').attr('class','tbl').attr('id',`tbl-${t.name}`).attr('transform',`translate(${x},${y})`);
+        
+        // Table hover & click events
+        tblG.on('mouseenter', () => {
+            // Hover only changes the diagram when nothing is pinned.
+            if (!activeTable && !activeRelId) highlightTable(t.name);
+        });
+        tblG.on('mouseleave', () => {
+            // A pinned table stays highlighted while the cursor moves.
+            if (!activeTable && !activeRelId) clearHighlight();
+        });
+        tblG.on('click', (e) => {
+            e.stopPropagation();
+            if (activeTable === t.name) {
+                activeTable = null;
+                clearHighlight();
+            } else {
+                activeTable = t.name;
+                activeRelId = null;
+                highlightTable(t.name);
+            }
+        });
+        tblG.append('rect').attr('class','tbl-card').attr('width',CARD_W).attr('height',cardH);
+        const clipId = `clip-${t.name}`;
+        tblG.append('clipPath').attr('id',clipId).append('rect').attr('width',CARD_W).attr('height',HDR_H).attr('rx',8).attr('ry',8);
+        tblG.append('rect').attr('class','tbl-hdr').attr('width',CARD_W).attr('height',HDR_H+8).attr('fill',hdrColor).attr('clip-path',`url(#${clipId})`);
+        tblG.append('text').attr('class','tbl-title').attr('x',12).attr('y',18).text(t.name);
+        tblG.append('text').attr('class','tbl-type').attr('x',CARD_W-12).attr('y',18).attr('text-anchor','end').text(t.table_type);
+        t.columns.forEach((c, idx) => {
+            const rowY = HDR_H+idx*ROW_H;
+            const isFk = (t.foreign_keys||[]).some(fk => fk.constrained_column===c.name);
+            const rowG = tblG.append('g').attr('class','row').attr('id',`row-${t.name}-${c.name}`).attr('transform',`translate(0,${rowY})`);
+            rowG.append('rect').attr('class','row-bg').attr('width',CARD_W).attr('height',ROW_H);
+            rowG.append('circle').attr('class',`port-dot ${c.is_pk?'pk':''} ${isFk?'fk':''}`).attr('id',`port-l-${t.name}-${c.name}`).attr('cx',0).attr('cy',ROW_H/2).attr('r',3.5);
+            rowG.append('circle').attr('class',`port-dot ${c.is_pk?'pk':''} ${isFk?'fk':''}`).attr('id',`port-r-${t.name}-${c.name}`).attr('cx',CARD_W).attr('cy',ROW_H/2).attr('r',3.5);
+            const pkTag = c.is_pk ? '\u25C6 ' : (isFk ? '\u25CB ' : '  ');
+            rowG.append('text').attr('class','col-txt').attr('x',12).attr('y',ROW_H/2+4).text(pkTag+c.name);
+            rowG.append('text').attr('class','col-type').attr('x',CARD_W-10).attr('y',ROW_H/2+4).text(c.data_type);
+        });
+    });
+
+    relations.forEach((rel, i) => {
+        const sp = getPort(rel.srcTable,rel.srcCol), ep = getPort(rel.tgtTable,rel.tgtCol);
+        const isLR = ep.left.x > sp.right.x;
+        const start = isLR ? sp.right : sp.left, end = isLR ? ep.left : ep.right;
+        const midX = (start.x+end.x)/2, midY = (start.y+end.y)/2;
+        const offsetX = ((i - Math.floor(relations.length/2)) * 6);
+        const adjMidX = midX + offsetX;
+        const d = `M ${start.x} ${start.y} H ${adjMidX} V ${end.y} H ${end.x}`;
+        const isFk = rel.kind==='fk', sc = isFk?'#58a6ff':'#da3633', me = isFk?'url(#arr-fk)':'url(#arr-inf)';
+        const relG = edgesGroup.append('g').attr('class','rel').attr('id',rel.id);
+        relG.append('path').attr('class','rel-hit').attr('d',d);
+        relG.append('path').attr('class','rel-line').attr('d',d).attr('stroke',sc).attr('stroke-dasharray',isFk?null:'6,4').attr('marker-end',me);
+        const badgeG = relG.append('g').attr('class','rel-badge').attr('transform',`translate(${adjMidX},${midY})`);
+        const badgeW = rel.relType.length*6.8+14;
+        badgeG.append('rect').attr('x',-badgeW/2).attr('y',-9).attr('width',badgeW).attr('height',18).attr('stroke',sc);
+        badgeG.append('text').attr('fill',sc).text(rel.relType);
+        relG.on('mouseenter', (e) => { if (!activeRelId && !activeTable) { highlightRelation(rel); showTooltip(e, rel); } else if (activeRelId === rel.id) { showTooltip(e, rel); } });
+        relG.on('mousemove', (e) => { if (activeRelId === rel.id || (!activeTable && !activeRelId)) moveTooltip(e); });
+        relG.on('mouseleave', () => { if (!activeRelId && !activeTable) clearHighlight(); hideTooltip(); });
+        relG.on('click', (e) => { e.stopPropagation(); if(activeRelId===rel.id){activeRelId=null;clearHighlight();}else{activeRelId=rel.id;activeTable=null;highlightRelation(rel);} });
+    });
+
+    zoomBehavior = d3.zoom().scaleExtent([0.15,3.5]).on('zoom',(e)=>world.attr('transform',e.transform));
+    svg.call(zoomBehavior); svg.on('dblclick.zoom',null);
+    setTimeout(()=>zoomFit(),100);
+}
+
+/* ---- Highlight ---- */
+function highlightTable(tableName) {
+    // Find all connected relations
+    const relatedRels = allRelations.filter(r => r.srcTable === tableName || r.tgtTable === tableName);
+    const connectedTableNames = new Set([tableName]);
+    relatedRels.forEach(r => {
+        connectedTableNames.add(r.srcTable);
+        connectedTableNames.add(r.tgtTable);
+    });
+
+    // Dim everything else
+    d3.selectAll('.rel').classed('dim', true).classed('active', false);
+    d3.selectAll('.tbl').classed('dim', true);
+    d3.selectAll('.row-bg').classed('hot', false);
+    d3.selectAll('.port-dot').classed('hot', false);
+
+    // Highlight connected tables
+    connectedTableNames.forEach(tName => {
+        d3.select(`#tbl-${tName}`).classed('dim', false);
+    });
+
+    // Highlight connected relations and ports
+    relatedRels.forEach(rel => {
+        const relEl = d3.select(`#${rel.id}`);
+        relEl.classed('dim', false).classed('active', true);
+        const isFk = rel.kind === 'fk';
+        relEl.select('.rel-line')
+            .attr('stroke', '#ffffff')
+            .attr('marker-end', isFk ? 'url(#arr-fk-hot)' : 'url(#arr-inf-hot)');
+
+        d3.select(`#row-${rel.srcTable}-${rel.srcCol} .row-bg`).classed('hot', true);
+        d3.select(`#row-${rel.tgtTable}-${rel.tgtCol} .row-bg`).classed('hot', true);
+        d3.select(`#port-r-${rel.srcTable}-${rel.srcCol}`).classed('hot', true);
+        d3.select(`#port-l-${rel.tgtTable}-${rel.tgtCol}`).classed('hot', true);
+    });
+}
+
+function highlightRelation(rel) {
+    d3.selectAll('.rel').classed('dim',true).classed('active',false);
+    d3.selectAll('.tbl').classed('dim',true);
+    d3.selectAll('.row-bg').classed('hot',false);
+    d3.selectAll('.port-dot').classed('hot',false);
+    const relEl = d3.select(`#${rel.id}`);
+    relEl.classed('dim',false).classed('active',true);
+    const isFk = rel.kind==='fk';
+    relEl.select('.rel-line').attr('stroke','#ffffff').attr('marker-end',isFk?'url(#arr-fk-hot)':'url(#arr-inf-hot)');
+    d3.select(`#tbl-${rel.srcTable}`).classed('dim',false);
+    d3.select(`#tbl-${rel.tgtTable}`).classed('dim',false);
+    d3.select(`#row-${rel.srcTable}-${rel.srcCol} .row-bg`).classed('hot',true);
+    d3.select(`#row-${rel.tgtTable}-${rel.tgtCol} .row-bg`).classed('hot',true);
+    d3.select(`#port-r-${rel.srcTable}-${rel.srcCol}`).classed('hot',true);
+    d3.select(`#port-l-${rel.tgtTable}-${rel.tgtCol}`).classed('hot',true);
+}
+
+function clearHighlight() {
+    activeRelId = null;
+    activeTable = null;
+    d3.selectAll('.rel').classed('dim',false).classed('active',false);
+    d3.selectAll('.tbl').classed('dim',false);
+    d3.selectAll('.row-bg').classed('hot',false);
+    d3.selectAll('.port-dot').classed('hot',false);
+    d3.selectAll('.rel').each(function() {
+        const el=d3.select(this), id=el.attr('id')||'', isFk=id.startsWith('fk');
+        el.select('.rel-line').attr('stroke',isFk?'#58a6ff':'#da3633').attr('marker-end',isFk?'url(#arr-fk)':'url(#arr-inf)');
+    });
+}
+
+function showTooltip(e, rel) {
+    const tip = document.getElementById('rel-tip');
+    const isFk = rel.kind==='fk';
+    const tag = isFk ? '<span class="fk-badge">Foreign Key</span>' : '<span class="pk-badge">Inferred NoSQL</span>';
+    const conf = rel.confidence ? `<br><span style="color:#8b949e;">Confidence:</span> ${(rel.confidence*100).toFixed(0)}%` : '';
+    tip.innerHTML = `<div style="margin-bottom:4px">${tag} <b style="color:#58a6ff;margin-left:4px">${rel.relType}</b></div><div><span style="color:#f85149">\u25CF Source:</span> <b>${rel.srcTable}</b>.${rel.srcCol}</div><div><span style="color:#58a6ff">\u25CF Target:</span> <b>${rel.tgtTable}</b>.${rel.tgtCol}</div>${conf}`;
+    tip.style.display = 'block'; moveTooltip(e);
+}
+
+function moveTooltip(e) {
+    const tip = document.getElementById('rel-tip');
+    const c = document.getElementById('graph-container').getBoundingClientRect();
+    tip.style.left = (e.clientX-c.left+16)+'px'; tip.style.top = (e.clientY-c.top+16)+'px';
+}
+
+function hideTooltip() { document.getElementById('rel-tip').style.display='none'; }
+
+/* ---- Zoom ---- */
+function zoomFit() {
+    const svg = d3.select('#svg-canvas'), world = svg.select('#world');
+    if (!world.node()||!zoomBehavior) return;
+    const bbox = world.node().getBBox(); if(bbox.width===0||bbox.height===0) return;
+    const cw=document.getElementById('graph-container').clientWidth, ch=document.getElementById('graph-container').clientHeight;
+    const scale=Math.min((cw-120)/bbox.width,(ch-120)/bbox.height,1.2);
+    svg.transition().duration(400).call(zoomBehavior.transform,d3.zoomIdentity.translate(cw/2-(bbox.x+bbox.width/2)*scale,ch/2-(bbox.y+bbox.height/2)*scale).scale(scale));
+}
+function zoomIn(){const svg=d3.select('#svg-canvas');if(zoomBehavior)svg.transition().duration(250).call(zoomBehavior.scaleBy,1.3);}
+function zoomOut(){const svg=d3.select('#svg-canvas');if(zoomBehavior)svg.transition().duration(250).call(zoomBehavior.scaleBy,0.77);}
+
+/* ---- Details ---- */
+function renderDetails(schema) {
+    const el = document.getElementById('detail-panel'); let html = '';
+    schema.tables.forEach(t => {
+        const color = COLORS[t.table_type]||COLORS.default;
+        html += `<div class="section-title" style="color:${color}">${t.name} <span style="color:#484f58;font-size:12px;font-weight:400">${t.table_type} \u00B7 ${t.columns.length} columns</span></div>`;
+        html += '<table class="col-table"><thead><tr><th>#</th><th>Column</th><th>Type</th><th>Key</th><th>Nullable</th><th>Default</th></tr></thead><tbody>';
+        t.columns.forEach((c,i) => { let key=''; if(c.is_pk)key='<span class="pk-badge">PK</span>'; else if((t.foreign_keys||[]).some(fk=>fk.constrained_column===c.name))key='<span class="fk-badge">FK</span>'; html += `<tr><td>${i+1}</td><td>${c.name}</td><td>${c.data_type}</td><td>${key}</td><td>${c.is_nullable?'Y':'N'}</td><td>${c.default||''}</td></tr>`; });
+        html += '</tbody></table>';
+        if(t.foreign_keys&&t.foreign_keys.length){html+='<div class="section-title" style="font-size:12px;color:#58a6ff">Foreign Keys</div>';t.foreign_keys.forEach(fk=>{html+=`<div style="font-size:13px;margin:2px 0"><span class="fk-badge">FK</span> ${t.name}.${fk.constrained_column} \u2192 ${fk.referred_table}.${fk.referred_column}</div>`;});}
+    });
+    if(schema.inferred_relations&&schema.inferred_relations.length){html+='<div class="section-title" style="color:#da3633">Inferred Relationships</div>';schema.inferred_relations.forEach(r=>{html+=`<div style="font-size:13px;margin:2px 0"><span class="pk-badge" style="background:#da363322">INF</span> ${r.from_table}.${r.from_field} \u2192 ${r.to_table}.${r.to_field} <span style="color:#484f58">(${(r.confidence*100).toFixed(0)}%)</span></div>`;});}
+    el.innerHTML = html || '<div style="padding:20px;color:#484f58">No schema data.</div>';
+}
+
+/* ---- Export ---- */
+function renderExportButtons() {
+    document.getElementById('export-panel').innerHTML = `<div class="export-buttons"><button class="btn btn-secondary" onclick="doExport('sql')">SQL DDL</button><button class="btn btn-secondary" onclick="doExport('dbml')">DBML</button><button class="btn btn-secondary" onclick="doExport('markdown')">Markdown</button><button class="btn btn-secondary" onclick="doExport('json')">JSON</button><button class="btn btn-secondary" onclick="copyExport()" id="copy-btn">Copy</button></div><div class="export-code" id="export-code">Select a format above.</div>`;
+}
+async function doExport(format) { try { const content = await api('/export', { connection_id:currentConnectionId, database:currentDatabase, format }); document.getElementById('export-code').textContent = content; } catch(e) { alert(e.message); } }
+function copyExport() { navigator.clipboard.writeText(document.getElementById('export-code').textContent).then(()=>{const b=document.getElementById('copy-btn');b.textContent='Copied!';setTimeout(()=>b.textContent='Copy',1500);}); }
+
+window.addEventListener('resize', () => { if (currentSchema) zoomFit(); });
+refreshSidebar();
+</script>
+</body>
+</html>

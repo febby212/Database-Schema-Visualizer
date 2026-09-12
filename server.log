@@ -1,0 +1,44 @@
+INFO:     Started server process [111948]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8080 (Press CTRL+C to quit)
+INFO:     127.0.0.1:51494 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51502 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51506 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51506 - "GET /api/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51506 - "POST /api/list-databases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51506 - "POST /api/schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51280 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51280 - "GET /api/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46532 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46532 - "GET /api/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46532 - "POST /api/list-databases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46532 - "POST /api/schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45568 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45568 - "GET /api/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45568 - "POST /api/list-databases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45568 - "POST /api/schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56690 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56690 - "GET /api/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56690 - "POST /api/list-databases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56690 - "POST /api/schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53078 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53078 - "GET /api/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53078 - "POST /api/list-databases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53078 - "POST /api/schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35132 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35132 - "GET /api/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35132 - "POST /api/list-databases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35132 - "POST /api/schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46388 - "GET /api/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49146 - "POST /api/connect HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49146 - "GET /api/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49146 - "POST /api/list-databases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49146 - "POST /api/connect HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49146 - "GET /api/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49146 - "POST /api/list-databases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49146 - "GET /api/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49146 - "DELETE /api/connections/d5889e59-bc38-413f-ad40-13fbefd3c551 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49146 - "GET /api/connections HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49146 - "POST /api/list-databases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49146 - "POST /api/schema HTTP/1.1" 200 OK
